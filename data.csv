@@ -1,0 +1,33 @@
+ID,Speaker,Text,Choices,Next_IDs,Condition,Effect,Emotion,AudioID
+1,Fisher,"*тихо бормочет* Раньше тут ловилась рыба... Теперь только они.",["Кто они?","Может, сменить место?","..."],[2,3,4],"-","-",Sad,fisher_001
+2,Player,"Кто они?",[],"[5]","-","SetFlag('HeardAboutThem')",Curious,player_001
+3,Player,"Может, сменить место?",[],"[6]","-","Reputation += 5",Neutral,player_002
+4,Player,"...",[],"[7]","-","Reputation -= 3",Aggressive,player_003
+5,Fisher,"*указывает на воду* Видишь пузыри? Это не рыба... Они стучат по дну лодки.",["Это страшно","У меня мурашки","Сойти на берег!"],[8,9,10],"HasFlag('Night>3')","AddSanity(-10)",Creepy,fisher_002
+6,Fisher,"*качает головой* Везде они... Даже в верховьях, где вода как слезы.",["Как слезы?","Я передумал"],"[11,12]","-","SetFlag('KnowsAboutCocytus')",Hopeless,fisher_003
+7,Fisher,"*молчит, достает мокрый сверток*",[],"[13]","-","RunEvent('OpenBundle')",Angry,fisher_004
+8,Player,"Это страшно",[],"[14]","Sanity < 50","AddSanity(-20)",Scared,player_004
+9,Player,"У меня мурашки",[],"[15]","-","-",Nervous,player_005
+10,Player,"Сойти на берег!",[],"[16]","IsAtDock","TeleportToDock()",Panic,player_006
+11,Player,"Как слезы?",[],"[17]","HasFlag('KnowsAboutCocytus')","PlaySound('Whisper_Cocytus')",Curious,player_007
+12,Player,"Я передумал",[],"[18]","-","Reputation -= 5",Regretful,player_008
+13,Fisher,"*развязывает сверток* Посмотри...",[],"[19]","-","ShowItem('HairBundle')",Empty,fisher_005
+14,Fisher,"Ха! Ты ещё не видел, что плавает у дамбы...",[],"[20]","-","UnlockLocation('Dam')",Crazy,fisher_006
+15,Fisher,"*шепотом* Они любят боязливых...",[],"[21]","-","AddSanity(-30)",Threatening,fisher_007
+16,System,"Вы высадились на берег. Вода внезапно почернела.",[],"[0]","-","ChangeWaterColor('Black')",Neutral,system_001
+17,Fisher,"Старое имя... Коцит. Платишь слезами вместо монет.",[],"[22]","-","AddItem('Tear')",Dark,fisher_008
+18,Fisher,"*смеется* Слишком поздно!",[],"[23]","-","SpawnEnemy('RiverShadow')",Mad,fisher_009
+19,Player,"*волосы в свертке*",["Выбросить за борт","Спрятать","Сжечь"],[24,25,26],"-","-",Shocked,player_009
+20,System,"На карте появилась отметка 'Дамба'.",[],"[0]","-","-",Neutral,system_002
+21,System,"Где-то вдалеке раздался плеск.",[],"[0]","-","PlaySound('Splash_Large')",Neutral,system_003
+22,Player,"*тихо* Значит, мы уже...",[],"[27]","HasItem('Tear')","SetFlag('KnowsAfterlife')",Whisper,player_010
+23,System,"Из воды показались черные щупальца!",[],"[28]","-","StartCombat()",Neutral,system_004
+24,Player,"Выбросить за борт",[],"[29]","-","RemoveItem('HairBundle')",Disgusted,player_011
+25,Player,"Спрятать",[],"[30]","-","AddSanity(-15)",Guilty,player_012
+26,Player,"Сжечь",[],"[31]","HasItem('Lighter')","RunEvent('FireOnBoat')",Angry,player_013
+27,Fisher,"*кивает* И плывём, плывём...",[],"[0]","-","FadeToBlack()",Tired,fisher_010
+28,System,"Бой начался! Мотор заглох.",[],"[0]","-","DisableBoat()",Neutral,system_005
+29,System,"Вода забурлила. Что-то схватило сверток.",[],"[0]","-","PlayAnimation('GrabFromDepth')",Neutral,system_006
+30,Fisher,"*шепчет* Теперь они знают твой запах...",[],"[32]","-","SetFlag('MarkedByCreatures')",Fearful,fisher_011
+31,System,"Пламя осветило реку. Вода вскрикнула.",[],"[0]","-","Achievement('Pyromaniac')",Neutral,system_007
+32,System,"Компас начал бешено вращаться.",[],"[0]","-","DisableCompass(300)",Neutral,system_008
