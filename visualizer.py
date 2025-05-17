@@ -8,6 +8,25 @@ import sys
 from config.config_manager import load_config, get_csv_path, log_message
 from datetime import datetime
 
+def parse_range(input_str, max_id):
+    """Parse input range like '1-3,5,7-9' into list of IDs"""
+    if not input_str.strip():
+        return list(range(1, max_id + 1))  # Return all IDs if empty input
+    
+    ids = set()
+    parts = input_str.split(',')
+    
+    for part in parts:
+        part = part.strip()
+        if '-' in part:
+            start, end = map(int, part.split('-'))
+            ids.update(range(start, end + 1))
+        elif part.isdigit():
+            ids.add(int(part))
+    
+    # Filter IDs that exist in the dialogs
+    return sorted(id for id in ids if 1 <= id <= max_id)
+
 def parse_choices(value):
     """Parse player choices in format 'Text ➔NextID [Condition]|...'"""
     if value == '-' or not value.strip():
@@ -88,11 +107,16 @@ def load_dialogs(filename, log_file):
         log_message(error_msg, log_file)
         raise
 
-def visualize_dialogs(dialogs, output_file, log_file):
+def visualize_dialogs(dialogs, output_file, log_file, selected_ids=None):
     """Visualize dialogue tree with improved layout"""
     log_message("Starting visualization process", log_file)
     plt.figure(figsize=(30, 20))
     G = nx.DiGraph()
+    
+    # Filter dialogs if specific IDs are selected
+    if selected_ids:
+        dialogs = {k: v for k, v in dialogs.items() if k in selected_ids}
+        log_message(f"Visualizing selected IDs: {selected_ids}", log_file)
     
     # Add nodes with attributes
     for d_id, data in dialogs.items():
@@ -119,7 +143,7 @@ def visualize_dialogs(dialogs, output_file, log_file):
         G.add_node(d_id, label=label, color=color, shape=shape, 
                   speaker=speaker, emotion=data['emotion'])
     
-    # Add edges with choices
+    # Add edges with choices (only between selected nodes)
     for d_id, data in dialogs.items():
         for choice, next_id in zip(data['choices'], data['next_ids']):
             if next_id in dialogs:
@@ -215,12 +239,17 @@ def main():
     
     try:
         dialogs = load_dialogs(csv_path, log_file)
-        print(f"\nLoaded {len(dialogs)} dialogue nodes")
+        print(f"\nLoaded {len(dialogs)} dialogue nodes (IDs: 1-{max(dialogs.keys())})")
         log_message(f"Loaded {len(dialogs)} dialogue nodes", log_file)
+        
+        # Get ID range input
+        range_prompt = "Enter dialog IDs to visualize (e.g. '1-3,5,7-9' or leave empty for all): "
+        id_range = input(range_prompt).strip()
+        selected_ids = parse_range(id_range, max(dialogs.keys())) if id_range else None
         
         output = input("Enter output filename [graph.png]: ") or "graph.png"
         log_message(f"Output file set to: {output}", log_file)
-        visualize_dialogs(dialogs, output, log_file)
+        visualize_dialogs(dialogs, output, log_file, selected_ids)
     except Exception as e:
         error_msg = f"\nError: {str(e)}"
         print(error_msg)
