@@ -1,64 +1,117 @@
 # visualizer.py
 import csv
-import json
+import os
+import re
 import matplotlib.pyplot as plt
 import networkx as nx
-from config.config_manager import load_config, get_csv_path
+import sys
+from config.config_manager import load_config, get_csv_path, log_message
+from datetime import datetime
 
-def parse_field(value):
-    """Парсит поле CSV, обрабатывая JSON или строки"""
+def parse_choices(value):
+    """Parse player choices in format 'Text ➔NextID [Condition]|...'"""
     if value == '-' or not value.strip():
-        return None
+        return [], []
     
-    # Обработка списков в квадратных скобках
-    if value.startswith('[') and value.endswith(']'):
-        try:
-            inner = value[1:-1].strip()
-            if not inner:
-                return []
-            return [item.strip(" '\"") for item in inner.split(',')]
-        except:
-            return value
+    choices = []
+    next_ids = []
     
-    # Попытка парсинга JSON
-    try:
-        return json.loads(value.replace("'", '"'))
-    except:
-        return value
+    for choice in value.split('|'):
+        choice = choice.strip()
+        if not choice:
+            continue
+            
+        # Parse choice structure
+        match = re.match(r'^(.+?)➔(\d+)(?:\s*\[(.+?)\])?$', choice)
+        if match:
+            text = match.group(1).strip()
+            next_id = int(match.group(2))
+            condition = match.group(3) or ""
+            
+            choices.append(f"{text} [{condition}]" if condition else text)
+            next_ids.append(next_id)
+    
+    return choices, next_ids
 
-def load_dialogs(filename):
-    """Загружает диалоги из CSV файла"""
-    dialogs = {}
-    with open(filename, 'r', encoding='utf-8-sig') as file:
-        reader = csv.DictReader(file)
-        for row in reader:
+def parse_textpool(value):
+    """Parse NPC reply variants with weights"""
+    if value == '-' or not value.strip():
+        return []
+    
+    variants = []
+    for variant in value.split('|'):
+        variant = variant.strip()
+        if not variant:
+            continue
+            
+        # Check for weight
+        if '*' in variant:
+            weight, text = variant.split('*', 1)
             try:
-                dialog_id = int(row['ID'])
-                dialogs[dialog_id] = {
-                    'speaker': row['Speaker'],
-                    'text': row['Text'],
-                    'choices': parse_field(row['Choices']) or [],
-                    'next_ids': parse_field(row['Next_IDs']) or [],
-                    'emotion': row['Emotion'],
-                    'audio_id': row['AudioID']
-                }
-            except Exception as e:
-                raise ValueError(f"Error in row {row}: {str(e)}")
-    return dialogs
+                weight = float(weight.strip())
+            except ValueError:
+                weight = 1.0
+            variants.append(f"{weight}*{text.strip()}")
+        else:
+            variants.append(variant.strip())
+    
+    return variants
 
-def visualize_dialogs(dialogs, output_file='dialogue_graph.png'):
-    """Визуализирует дерево диалогов"""
-    plt.figure(figsize=(24, 16))
+def load_dialogs(filename, log_file):
+    """Load dialogs from CSV file"""
+    dialogs = {}
+    try:
+        with open(filename, 'r', encoding='utf-8-sig') as file:
+            reader = csv.DictReader(file)
+            for row in reader:
+                try:
+                    dialog_id = int(row['ID'])
+                    choices, next_ids = parse_choices(row['PlayerChoices'])
+                    
+                    dialogs[dialog_id] = {
+                        'speaker': row['Speaker'],
+                        'text_pool': parse_textpool(row['TextPool']),
+                        'choices': choices,
+                        'next_ids': next_ids,
+                        'effects': row['Effects'],
+                        'emotion': row['Emotion'],
+                        'audio': row['Audio']
+                    }
+                except Exception as e:
+                    error_msg = f"Error in row {row}: {str(e)}"
+                    log_message(error_msg, log_file)
+                    raise
+        log_message(f"Successfully loaded {len(dialogs)} dialogs from {filename}", log_file)
+        return dialogs
+    except Exception as e:
+        error_msg = f"Failed to load dialogs: {str(e)}"
+        log_message(error_msg, log_file)
+        raise
+
+def visualize_dialogs(dialogs, output_file, log_file):
+    """Visualize dialogue tree with improved layout"""
+    log_message("Starting visualization process", log_file)
+    plt.figure(figsize=(30, 20))
     G = nx.DiGraph()
     
-    # Добавляем узлы с атрибутами
+    # Add nodes with attributes
     for d_id, data in dialogs.items():
         speaker = data['speaker']
-        text = '\n'.join([data['text'][i:i+40] for i in range(0, len(data['text']), 40)])
-        label = f"{speaker}\nID: {d_id}\n{text}"
         
-        if data['audio_id']:
-            label += f"\nAudio: {data['audio_id']}"
+        # Build node label
+        text_pool = '\n'.join(data['text_pool'][:3])  # Show first 3 variants
+        if len(data['text_pool']) > 3:
+            text_pool += '\n...'
+            
+        label = f"{speaker}\nID: {d_id}"
+        if text_pool:
+            label += f"\n---\n{text_pool}"
+            
+        if data['effects'] and data['effects'] != '-':
+            label += f"\n---\nEffects: {data['effects']}"
+            
+        if data['audio'] and data['audio'] != '-':
+            label += f"\nAudio: {data['audio']}"
         
         color = '#ffcccc' if speaker == 'Player' else '#ccffcc'
         shape = 'box' if speaker == 'Player' else 'ellipse'
@@ -66,82 +119,112 @@ def visualize_dialogs(dialogs, output_file='dialogue_graph.png'):
         G.add_node(d_id, label=label, color=color, shape=shape, 
                   speaker=speaker, emotion=data['emotion'])
     
-    # Добавляем связи
+    # Add edges with choices
     for d_id, data in dialogs.items():
         for choice, next_id in zip(data['choices'], data['next_ids']):
             if next_id in dialogs:
-                G.add_edge(d_id, next_id, label=choice[:20])
+                G.add_edge(d_id, next_id, label=choice[:15])  # Shorter edge labels
         
+        # For NPC nodes without player choices
         if not data['choices'] and data['next_ids']:
             for next_id in data['next_ids']:
                 if next_id in dialogs:
                     G.add_edge(d_id, next_id)
     
-    # Разделяем узлы по типам говорящих
+    # Improved layout using graphviz
+    try:
+        pos = nx.nx_agraph.graphviz_layout(G, prog='dot')
+        log_message("Using graphviz layout", log_file)
+    except:
+        # Fallback layout if graphviz isn't available
+        log_message("Graphviz not found, using spring layout instead", log_file)
+        print("Graphviz not found, using spring layout instead")
+        pos = nx.spring_layout(G, k=1.5, iterations=50)
+    
+    # Separate node types
     player_nodes = [n for n in G.nodes if G.nodes[n]['speaker'] == 'Player']
-    other_nodes = [n for n in G.nodes if G.nodes[n]['speaker'] != 'Player']
+    npc_nodes = [n for n in G.nodes if G.nodes[n]['speaker'] != 'Player']
     
-    # Создаем слои для лучшего расположения
-    pos = {}
-    layer_gap = 3.0
-    node_gap = 1.5
-    
-    # Располагаем узлы Player слева, другие справа
-    for i, node in enumerate(player_nodes):
-        pos[node] = (-layer_gap, -i * node_gap)
-    
-    for i, node in enumerate(other_nodes):
-        pos[node] = (layer_gap, -i * node_gap)
-    
-    # Рисуем узлы
+    # Draw nodes with different styles
     nx.draw_networkx_nodes(G, pos, nodelist=player_nodes,
-                          node_color='#ffcccc',
-                          node_shape='s',
-                          node_size=3000)
+                         node_color='#ffcccc',
+                         node_shape='s',
+                         node_size=4000,
+                         alpha=0.9)
     
-    nx.draw_networkx_nodes(G, pos, nodelist=other_nodes,
-                          node_color='#ccffcc',
-                          node_shape='o',
-                          node_size=3000)
+    nx.draw_networkx_nodes(G, pos, nodelist=npc_nodes,
+                         node_color='#ccffcc',
+                         node_shape='o',
+                         node_size=4000,
+                         alpha=0.9)
     
-    # Рисуем связи
-    nx.draw_networkx_edges(G, pos, arrows=True, 
-                          arrowstyle='->', 
-                          arrowsize=20,
-                          width=1.5)
+    # Draw edges with arrows
+    nx.draw_networkx_edges(G, pos, arrows=True,
+                         arrowstyle='->',
+                         arrowsize=25,
+                         width=2,
+                         edge_color='#555555',
+                         alpha=0.7)
     
-    # Подписи узлов
-    labels = {n: G.nodes[n]['label'] for n in G.nodes()}
-    nx.draw_networkx_labels(G, pos, labels=labels, 
-                           font_size=8, 
-                           font_family='Arial')
+    # Node labels
+    node_labels = {n: G.nodes[n]['label'] for n in G.nodes()}
+    nx.draw_networkx_labels(G, pos, labels=node_labels,
+                          font_size=9,
+                          font_family='Arial',
+                          font_weight='bold')
     
-    # Подписи связей
+    # Edge labels (choices)
     edge_labels = nx.get_edge_attributes(G, 'label')
-    nx.draw_networkx_edge_labels(G, pos, 
-                                edge_labels=edge_labels,
-                                font_size=7,
-                                bbox=dict(alpha=0))
+    nx.draw_networkx_edge_labels(G, pos,
+                               edge_labels=edge_labels,
+                               font_size=8,
+                               font_color='#aa0000',
+                               bbox=dict(alpha=0.7))
     
-    plt.title("Dialogue Tree Visualization", fontsize=14)
+    plt.title("Dialogue Tree Visualization", fontsize=16, pad=20)
     plt.axis('off')
-    plt.tight_layout()
+    
+    # Adjust layout to prevent overlap
+    plt.tight_layout(pad=3.0)
     plt.savefig(output_file, dpi=300, bbox_inches='tight')
-    print(f"\nГраф сохранен как: {output_file}")
+    success_msg = f"\nGraph saved as: {output_file}"
+    print(success_msg)
+    log_message(success_msg, log_file)
 
 def main():
-    """Основная функция визуализатора"""
-    print("=== Визуализатор диалогов ===")
+    """Main visualization function"""
+    if len(sys.argv) < 2:
+        print("Error: Log file path not provided!")
+        return
+    
+    log_file = sys.argv[1]
+    log_message("=== Visualizer started ===", log_file)
+    print("=== Dialogue Visualizer ===")
+    
     config = load_config()
     csv_path = get_csv_path(config)
     
+    if not csv_path or not os.path.exists(csv_path):
+        log_message("No valid CSV path in config", log_file)
+        csv_path = input("Enter CSV file path: ").strip('"')
+        if not os.path.exists(csv_path):
+            error_msg = "Error: File does not exist!"
+            print(error_msg)
+            log_message(error_msg, log_file)
+            return
+    
     try:
-        dialogs = load_dialogs(csv_path)
-        print(f"\nЗагружено {len(dialogs)} диалогов")
-        output = input("Введите имя файла для сохранения [dialogue_graph.png]: ") or "dialogue_graph.png"
-        visualize_dialogs(dialogs, output)
+        dialogs = load_dialogs(csv_path, log_file)
+        print(f"\nLoaded {len(dialogs)} dialogue nodes")
+        log_message(f"Loaded {len(dialogs)} dialogue nodes", log_file)
+        
+        output = input("Enter output filename [graph.png]: ") or "graph.png"
+        log_message(f"Output file set to: {output}", log_file)
+        visualize_dialogs(dialogs, output, log_file)
     except Exception as e:
-        print(f"\nОшибка: {str(e)}")
+        error_msg = f"\nError: {str(e)}"
+        print(error_msg)
+        log_message(error_msg, log_file)
 
 if __name__ == "__main__":
     main()
