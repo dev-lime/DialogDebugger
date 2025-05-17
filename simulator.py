@@ -1,7 +1,7 @@
 # simulator.py
 import csv
-import json
-import os
+import random
+import re
 from datetime import datetime
 from config.config_manager import load_config, save_config, get_csv_path, LOG_DIR
 
@@ -12,255 +12,174 @@ class GameState:
             'Reputation': 0,
             'Sanity': 100,
             'Night': 1,
-            'IsAtDock': True
+            'IsAtDock': True,
+            'Confidence': 0
         }
         self.inventory = []
     
     def SetFlag(self, flag):
         self.flags.add(flag)
+        print(f"[FLAG SET] {flag}")
     
     def HasFlag(self, flag):
         return flag in self.flags
     
     def AddSanity(self, value):
         self.variables['Sanity'] = max(0, min(100, self.variables['Sanity'] + value))
+        print(f"[SANITY] Changed by {value}. Current: {self.variables['Sanity']}")
+
+def parse_weighted_text(text_pool):
+    """Parse TextPool with weights (format: '1.2*Text|Text')"""
+    variants = []
+    for part in text_pool.split('|'):
+        part = part.strip()
+        if not part:
+            continue
+        
+        if '*' in part:
+            weight, text = part.split('*', 1)
+            variants.append((float(weight.strip()), text.strip()))
+        else:
+            variants.append((1.0, part.strip()))
+    return variants
+
+def select_random_text(text_pool):
+    """Select random text from TextPool considering weights"""
+    variants = parse_weighted_text(text_pool)
+    if not variants:
+        return ""
     
-    def __getitem__(self, key):
-        return self.variables.get(key, 0)
+    total_weight = sum(w for w, _ in variants)
+    rand = random.uniform(0, total_weight)
+    cumulative = 0.0
     
-    def __str__(self):
-        return f"Flags: {self.flags}, Vars: {self.variables}, Inventory: {self.inventory}"
+    for weight, text in variants:
+        cumulative += weight
+        if rand <= cumulative:
+            return text
+    
+    return variants[-1][1]
 
-def get_session_log_file():
-    """Создает файл лога для текущей сессии"""
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    return os.path.join(LOG_DIR, f"session_{timestamp}.log")
-
-def log_message(log_file, message):
-    """Записывает сообщение в лог-файл"""
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    with open(log_file, 'a', encoding='utf-8') as log:
-        log.write(f"[{timestamp}] {message}\n")
-
-def parse_field(value):
-    """Парсит поле CSV с правильной обработкой списков"""
-    if not value or value.strip() == '-':
+def parse_player_choice(choice_str):
+    """Parse player choice (format: 'Text ➔ID [Condition] {Effect}')"""
+    choice_str = choice_str.strip()
+    if not choice_str:
         return None
     
-    value = value.strip()
+    # Extract components
+    text = choice_str
+    next_id = None
+    condition = None
+    effect = None
     
-    # Обработка строк в кавычках
-    if (value.startswith('"') and value.endswith('"')) or (value.startswith("'") and value.endswith("'")):
-        return value[1:-1]
+    # Parse NextID (➔)
+    if '➔' in choice_str:
+        text, rest = choice_str.split('➔', 1)
+        next_id_str = rest.split()[0]
+        next_id = int(next_id_str) if next_id_str.isdigit() else None
     
-    # Обработка списков
-    if value.startswith('[') and value.endswith(']'):
-        try:
-            # Удаляем внешние скобки и разбиваем по запятым
-            inner = value[1:-1].strip()
-            if not inner:
-                return []
-            
-            # Разбиваем с учетом кавычек
-            items = []
-            current = []
-            in_quotes = False
-            quote_char = None
-            
-            for char in inner:
-                if char in ('"', "'") and not in_quotes:
-                    in_quotes = True
-                    quote_char = char
-                elif char == quote_char and in_quotes:
-                    in_quotes = False
-                    quote_char = None
-                elif char == ',' and not in_quotes:
-                    items.append(''.join(current).strip())
-                    current = []
-                else:
-                    current.append(char)
-            
-            if current:
-                items.append(''.join(current).strip())
-            
-            # Удаляем кавычки у элементов
-            return [item.strip(" '\"") for item in items]
-        except Exception as e:
-            print(f"List parsing error: {e}")
-            return value
+    # Parse condition [ ]
+    condition_match = re.search(r'\[([^\]]+)\]', choice_str)
+    if condition_match:
+        condition = condition_match.group(1).strip()
     
-    return value
+    # Parse effect { }
+    effect_match = re.search(r'\{(.+?)\}', choice_str)
+    if effect_match:
+        effect = effect_match.group(1).strip()
+    
+    return {
+        'text': text.strip(),
+        'next_id': next_id,
+        'condition': condition,
+        'effect': effect
+    }
 
 def load_dialogs(filename):
-    """Загружает диалоги с правильной обработкой всех полей"""
+    """Load dialogs from CSV"""
     dialogs = {}
     with open(filename, 'r', encoding='utf-8-sig') as file:
         reader = csv.DictReader(file)
         for row in reader:
             try:
                 dialog_id = int(row['ID'])
-                choices = parse_field(row['Choices']) or []
-                next_ids = parse_field(row['Next_IDs']) or []
-                
-                # Проверка соответствия количества вариантов и next_ids
-                if choices and len(choices) != len(next_ids):
-                    print(f"Warning: Dialog {dialog_id} has {len(choices)} choices but {len(next_ids)} next_ids")
-                
                 dialogs[dialog_id] = {
                     'speaker': row['Speaker'],
-                    'text': row['Text'],
-                    'choices': choices,
-                    'next_ids': next_ids,
-                    'condition': parse_field(row['Condition']),
-                    'effect': row['Effect'] if row['Effect'] != '-' else None,
+                    'text_pool': row['TextPool'],
+                    'player_choices': [parse_player_choice(c) for c in row['PlayerChoices'].split('|') if c.strip()],
+                    'effects': row['Effects'] if 'Effects' in row and row['Effects'] != '-' else None,
                     'emotion': row['Emotion'],
-                    'audio_id': row['AudioID'] if row['AudioID'] != '-' else None
+                    'audio': row['Audio'] if 'Audio' in row and row['Audio'] != '-' else None
                 }
             except Exception as e:
                 print(f"Error loading dialog {row.get('ID', 'unknown')}: {str(e)}")
                 raise
     return dialogs
 
-def check_condition(condition, game_state):
-    """Проверяет условие для диалога"""
-    # Если условие не задано или прочерк
-    if condition is None:
-        return True
-    
-    # Если условие - строка (не условие, а например "...")
-    if isinstance(condition, str):
-        return True
-    
-    # Обработка специальных функций
-    if isinstance(condition, str) and condition.startswith('HasFlag('):
-        flag = condition[8:-1].strip("'\"")
-        return game_state.HasFlag(flag)
-    
-    # Числовые условия
-    if isinstance(condition, (int, float)):
-        return bool(condition)
-    
-    # Сложные условия
-    try:
-        return eval(str(condition), {}, {
-            **game_state.variables,
-            'HasFlag': game_state.HasFlag
-        })
-    except:
-        return False
-
-def apply_effect(effect, game_state, log_file):
-    """Применяет эффект от диалога с улучшенной обработкой ошибок"""
-    if not effect or effect == '-':
-        return
-    
-    # Специальные команды
-    if effect.startswith('SetFlag('):
-        try:
-            flag = effect[8:-1].strip("'\"")
-            game_state.SetFlag(flag)
-            log_message(log_file, f"Set flag: {flag}")
-            return
-        except Exception as e:
-            log_message(log_file, f"Flag error: {str(e)}")
-            return
-    
-    if effect.startswith('AddSanity('):
-        try:
-            value = int(effect[10:-1])
-            game_state.AddSanity(value)
-            log_message(log_file, f"Added sanity: {value}")
-            return
-        except Exception as e:
-            log_message(log_file, f"Sanity error: {str(e)}")
-            return
-    
-    # Стандартные эффекты
-    try:
-        if effect.startswith(('Reputation', 'Sanity', 'Night', 'IsAtDock')):
-            exec(effect, {}, game_state.variables)
-            log_message(log_file, f"Applied effect: {effect}")
-    except Exception as e:
-        log_message(log_file, f"Effect error: {str(e)}")
-        print(f"Effect error: {str(e)}")
-
-def show_dialog(dialogs, start_id, game_state, log_file):
-    """Отображает диалог с правильной обработкой выбора"""
+def show_dialog(dialogs, start_id, game_state):
+    """Display dialog and handle player choice"""
     current_id = start_id
     while current_id in dialogs:
         dialog = dialogs[current_id]
         
-        if not check_condition(dialog['condition'], game_state):
-            print("\n[Диалог недоступен]")
-            return
+        # Show NPC text
+        npc_text = select_random_text(dialog['text_pool'])
+        print(f"\n{dialog['speaker']} ({dialog['emotion']}): {npc_text}")
+        if dialog['audio']:
+            print(f"[Sound: {dialog['audio']}]")
         
-        # Отображение диалога
-        print(f"\n{dialog['speaker']} ({dialog['emotion']}): {dialog['text']}")
-        if dialog['audio_id']:
-            print(f"[Audio: {dialog['audio_id']}]")
+        # Show general effects
+        if dialog['effects']:
+            print(f"[EFFECT] {dialog['effects']}")
         
-        # Обработка выбора игрока
-        if dialog['speaker'] == "Player" and dialog['choices']:
-            print("\nВарианты ответа:")
-            for i, (choice, next_id) in enumerate(zip(dialog['choices'], dialog['next_ids']), 1):
-                print(f"{i}. {choice}")
+        # Show player choices
+        if dialog['player_choices']:
+            print("\nAvailable choices:")
+            for i, choice in enumerate(dialog['player_choices'], 1):
+                condition_info = f" [REQUIRES: {choice['condition']}]" if choice['condition'] else ""
+                effect_info = f" [EFFECT: {choice['effect']}]" if choice['effect'] else ""
+                print(f"{i}. {choice['text']}{condition_info}{effect_info}")
             
+            # Let player choose any option regardless of conditions
             while True:
                 try:
-                    choice = int(input("Выберите вариант: ")) - 1
-                    if 0 <= choice < len(dialog['choices']):
-                        if dialog['effect']:
-                            apply_effect(dialog['effect'], game_state, log_file)
-                        current_id = dialog['next_ids'][choice]
+                    selected = int(input("Choose option: ")) - 1
+                    if 0 <= selected < len(dialog['player_choices']):
+                        chosen = dialog['player_choices'][selected]
+                        if chosen['effect']:
+                            print(f"[CHOICE EFFECT] {chosen['effect']}")
+                        current_id = chosen['next_id']
                         break
-                    print("Неверный выбор! Попробуйте снова.")
+                    print("Invalid choice!")
                 except ValueError:
-                    print("Пожалуйста, введите число!")
+                    print("Please enter a number!")
         else:
-            # Для NPC/System диалогов
-            if dialog['effect']:
-                apply_effect(dialog['effect'], game_state, log_file)
-            
-            if dialog['next_ids']:
-                current_id = dialog['next_ids'][0]
-            else:
-                print("\n[Конец диалога]")
-                return
+            # End of dialog branch
+            print("\n[End of dialog]")
+            return
 
 def main():
-    """Основная функция симулятора диалогов"""
-    print("=== Симулятор диалогов ===")
-    config = load_config()
-    csv_path = get_csv_path(config)
+    print("=== Dialogue Simulator (Simplified) ===")
+    csv_path = input("Enter CSV file path: ").strip()
     game_state = GameState()
-    log_file = get_session_log_file()
-    
-    log_message(log_file, "=== Начало сессии ===")
-    log_message(log_file, f"CSV file: {csv_path}")
     
     try:
         dialogs = load_dialogs(csv_path)
-        log_message(log_file, f"Loaded {len(dialogs)} dialogs")
-        print(f"\nЗагружено {len(dialogs)} диалогов")
+        print(f"\nLoaded {len(dialogs)} dialogs")
         
         while True:
             try:
-                start_id = int(input("\nВведите ID диалога (0=выход): "))
+                start_id = int(input("\nEnter dialog ID (0=exit): "))
                 if start_id == 0:
                     break
                 if start_id in dialogs:
-                    show_dialog(dialogs, start_id, game_state, log_file)
+                    show_dialog(dialogs, start_id, game_state)
                 else:
-                    print("Неверный ID диалога!")
+                    print("Dialog not found!")
             except ValueError:
-                print("Введите число!")
+                print("Please enter a number!")
     except Exception as e:
-        print(f"\nОшибка: {str(e)}")
-        log_message(log_file, f"CRASH: {str(e)}")
-    finally:
-        log_message(log_file, f"Final state: {game_state}")
-        log_message(log_file, "=== Конец сессии ===\n")
-        print("\nСмотрите логи в:", log_file)
+        print(f"Error: {str(e)}")
 
 if __name__ == "__main__":
     main()
