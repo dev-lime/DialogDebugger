@@ -350,3 +350,31 @@ ID,Speaker,TextPool,PlayerChoices,Effects,Emotion,Audio
 762,Anarchist,"*оживляется* Давай!","(Предложить) ➔776|(Сомневаться) Это рискованно... ➔777","-",Excited,anarchist_idea
 763,Anarchist,"...И я тоже. *вздыхает*","(Молча сесть рядом) ➔0","AddSanity(5)",Companionable,anarchist_sigh
 764,Anarchist,"*достаёт блокнот* Вот мой план.","(Изучить) ➔778|(Одобрить) Отлично! ➔779","-",Organized,anarchist_plan
+765,Anarchist,"*улыбается* Наконец-то!","(Разделить радость) ➔0","AddSanity(10)",Joyful,anarchist_joy
+766,Anarchist,"*пожимает плечами* Понял, что могу.","(Тронуто) Спасибо. ➔0","-",Shy,anarchist_shrug
+767,Anarchist,"*кивает* Знаю.","(Пождать руку) ➔0","-",Trusting,anarchist_trust
+768,BlindPriest,"*шёпотом* Та, что без конца.","(Испуганно) ➔0","AddSanity(-15)",Terrified,priest_doom
+769,Anarchist,"*крепко обнимает* Спасибо.","(Обнять в ответ) ➔0","AddSanity(10)|SetFlag('AnarchistFriend')",Grateful,anarchist_hug
+770,Anarchist,"*улыбается* И этого хватит.","(Кивнуть) ➔0","-",Warm,anarchist_smile
+771,Anarchist,"*слушает*","(Рассказать) ➔780|(Передумать) Давайте иначе. ➔781","-",Attentive,anarchist_listen
+772,Anarchist,"*кивает* Хорошо.","(Начать обсуждать) ➔0","-",Cooperative,anarchist_nod
+773,Anarchist,"Охранник. *смеётся* Да, смешно, правда?","(Потрясён) Нет... это мужество. ➔782|(Неловко) ...Да. ➔783","-",Bitter,anarchist_joke
+774,Anarchist,"...Нет. Но я попробую.","(Поддержать) Этого достаточно. ➔0","-",Honest,anarchist_try
+775,BlindPriest,"*кладёт руку ему на плечо* Боль — начало пути.","(Кивнуть) ➔0","AddSanity(5)",Compassionate,priest_comfort
+776,Anarchist,"*оживляется* Да! Риск — это жизнь!","(Согласиться) ➔784|(Осторожно) Но будем умнее. ➔785","-",Energetic,anarchist_risk
+777,Anarchist,"*нахмурился* Ты прав... Ладно, обсудим.","(Предложить вариант) ➔786|(Облегчённо) Спасибо. ➔787","-",Thoughtful,anarchist_rethink
+778,Anarchist,"*показывает* Здесь всё.","(Восхититься) Гениально! ➔788|(Уточнить детали) ➔789","-",Proud,anarchist_show
+779,Anarchist,"*смеётся* Пора действовать!","(Встать) ➔0","SetFlag('PlanAccepted')",Excited,anarchist_ready
+780,Anarchist,"*кивает* Добавлю кое-что...","(Слушать) ➔0","-",Collaborative,anarchist_add
+781,Anarchist,"*ждёт*","(Предложить новый план) ➔790|(Сдаться) Ваш черёд. ➔791","-",Patient,anarchist_wait
+782,Anarchist,"*смеётся сквозь слёзы* Да... был.","(Промолчать) ➔0","AddSanity(5)",Touched,anarchist_laugh
+783,Anarchist,"... *курит* Ладно, забудь.","(Извиниться) ➔792|(Промолчать) ➔0","-",Resigned,anarchist_smoke
+784,Anarchist,"*хлопает по спине* Вот это дух!","(Улыбнуться) ➔0","AddSanity(10)",Joyful,anarchist_approve
+785,Anarchist,"*смеётся* Ладно, старик.","(Толкнуть дружески) ➔0","-",Amused,anarchist_tease
+786,Anarchist,"*заинтересовался* Хм... Неплохо.","(Довольный) Точно! ➔0","-",Impressed,anarchist_idea
+787,Anarchist,"*кивает* Спасибо за правду.","(Кивнуть) ➔0","-",Grateful,anarchist_thanks
+788,Anarchist,"*гордо* Давно готовил.","(Рассмотреть) ➔0","-",Satisfied,anarchist_pride
+789,Anarchist,"*объясняет* Вот здесь мы...","(Внимательно слушать) ➔0","-",Detailed,anarchist_explain
+790,Anarchist,"*одобрительно* Лучше!","(Радоваться) ➔0","-",Happy,anarchist_better
+791,Anarchist,"*начинает рисовать* Смотри...","(Наблюдать) ➔0","-",Creative,anarchist_draw
+792,Anarchist,"*махнул рукой* Неважно.","(Промолчать) ➔0","-",Dismissive,anarchist_wave
