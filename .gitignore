@@ -34,3 +34,6 @@ coverage.xml
 # Logs
 logs/
 *.log
+
+# Config
+*.ini
