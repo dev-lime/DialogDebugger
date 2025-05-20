@@ -390,3 +390,6 @@ ID,Speaker,TextPool,PlayerChoices,Effects,Emotion,Audio
 2140,BlindPriest,"*садится в лодку* Спасибо. Вода сегодня... беспокойная.","... ➔0","SetFlag('PriestOnBoard')|AddSanity(10)",Grateful,priest_board
 2114,BlindPriest,"*качает головой* Страх — начало мудрости.","Садитесь. ➔2140|Я не беру вас. ➔2150","-",Calm,priest_fear
 2150,BlindPriest,"Как знаешь *уходит*|Выбор всегда за тобой *уходит*","... ➔0","AddSanity(-5)|SetFlag('PriestRejected')",Disappointed,priest_leave
+
+3100,SilentMan,"..|....","➔3101",,,
+3101,SilentMan,"*тишина*","Ну и ладно... ➔0",,,
